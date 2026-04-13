@@ -21,7 +21,7 @@
       align-items: center;
       font-family: 'Orbitron', 'Segoe UI', 'Poppins', system-ui, sans-serif;
       overflow: hidden;
-      touch-action: none;
+      touch-action: none;  /* critical for smooth touch dragging on phones */
     }
 
     /* glass panel — more futuristic */
@@ -139,7 +139,6 @@
       height: 100%;
       background: radial-gradient(circle at 20% 30%, #020617, #000000);
       touch-action: none;
-      pointer-events: none;
       cursor: none;
     }
 
@@ -163,14 +162,14 @@
       left: 20px;
       color: #aad0ff;
       font-size: 1rem;
-      opacity: 0.7;
+      opacity: 0.8;
       z-index: 100;
       pointer-events: none;
-      background: #00000040;
+      background: #00000060;
       padding: 6px 16px;
       border-radius: 40px;
       backdrop-filter: blur(5px);
-      border: 1px solid #3cc0ff40;
+      border: 1px solid #3cc0ff60;
     }
 
     .swipe-indicator {
@@ -181,11 +180,19 @@
       font-size: 1rem;
       z-index: 100;
       pointer-events: none;
-      background: #00000030;
+      background: #00000060;
       padding: 6px 16px;
       border-radius: 40px;
       backdrop-filter: blur(5px);
-      border: 1px solid #ffbb3340;
+      border: 1px solid #ffbb3360;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .swipe-icon {
+      font-size: 1.3rem;
+      filter: drop-shadow(0 0 4px #ffaa55);
     }
 
     @media (max-width: 600px) {
@@ -193,6 +200,7 @@
       .glass-panel { padding: 1.8rem 1.8rem; border-radius: 48px; }
       button { padding: 12px 28px; font-size: 1.2rem; }
       .sub { font-size: 1rem; }
+      .hint-badge, .swipe-indicator { font-size: 0.75rem; padding: 4px 12px; }
     }
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
@@ -217,8 +225,11 @@
     </div>
   </div>
 
-  <div class="hint-badge" id="hintLeft">← →  keys  ·  drag/swipe</div>
-  <div class="swipe-indicator" id="hintRight">✨ score ↑</div>
+  <div class="hint-badge" id="hintLeft">← →  keys  ·  finger drag/swipe</div>
+  <div class="swipe-indicator" id="hintRight">
+    <span class="swipe-icon">🖐️ ➡️</span>
+    <span>slide to move</span>
+  </div>
 
   <script>
     (() => {
@@ -252,12 +263,19 @@
       let gameStartTime = 0;
       let currentSpeedMultiplier = 1.0;
 
-      // control flags
+      // control flags for keyboard and enhanced touch/swipe
       let leftPressed = false;
       let rightPressed = false;
+      
+      // ----- IMPROVED TOUCH / SWIPE SYSTEM (phone optimized) -----
       let isDragging = false;
-      let lastDragX = 0;
-
+      let lastTouchX = 0;
+      let touchActive = false;
+      
+      // For smooth inertial feeling we use targetX updated directly from drag delta
+      // but also prevent conflicting jumps
+      
+      // Resize + canvas setup
       function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -266,6 +284,7 @@
           player.y = canvas.height - 90;
           targetX = player.x;
         } else {
+          // clamp existing position to new boundaries
           player.x = Math.min(Math.max(player.x, 0), canvas.width - player.width);
           targetX = player.x;
         }
@@ -287,7 +306,7 @@
         baseSpeed = 2.6;
         speedLevel = 0;
         currentSpeedMultiplier = 1.0;
-        gameStartTime = performance.now() / 1000; // will be set properly in start
+        gameStartTime = performance.now() / 1000;
 
         for (let i = 0; i < 4; i++) {
           spawnObject(true);
@@ -298,7 +317,6 @@
         const baseSize = 36 + Math.floor(Math.random() * 14);
         const size = Math.min(58, baseSize);
         
-        // Calculate current speed: baseSpeed + speedLevel, then apply random variation
         const currentBase = baseSpeed + speedLevel;
         const speedBase = (currentBase + Math.random() * 2.2) * currentSpeedMultiplier;
         const finalSpeed = Math.random() < 0.2 ? speedBase * 1.4 : speedBase;
@@ -320,39 +338,36 @@
         const currentTime = performance.now() / 1000;
         const elapsedSeconds = currentTime - gameStartTime;
         
-        // Calculate speed level: +1 for every 25 seconds
         const newSpeedLevel = Math.floor(elapsedSeconds / SPEED_INCREASE_INTERVAL);
         
         if (newSpeedLevel > speedLevel) {
           speedLevel = newSpeedLevel;
-          // Visual feedback: add particles when speed increases
-          for (let i = 0; i < 8; i++) {
+          // visual surge particles
+          for (let i = 0; i < 12; i++) {
             particles.push({
               x: player.x + player.width/2,
               y: player.y + player.height/2,
-              vx: (Math.random() - 0.5) * 6,
-              vy: (Math.random() - 0.5) * 6 - 2,
+              vx: (Math.random() - 0.5) * 7,
+              vy: (Math.random() - 0.5) * 7 - 2,
               life: 1.0,
-              size: 4 + Math.random() * 6,
-              color: '#ffaa33'
+              size: 4 + Math.random() * 7,
+              color: '#ffaa55'
             });
           }
         }
         
-        // Also gradually increase multiplier for existing objects? 
-        // We just use the new base speed for newly spawned objects
-        currentSpeedMultiplier = 1.0 + (elapsedSeconds / 180) * 0.3; // slight extra scaling over time
+        currentSpeedMultiplier = 1.0 + (elapsedSeconds / 180) * 0.3;
       }
 
       function addExplosion(px, py) {
-        for (let i=0; i<12; i++) {
+        for (let i=0; i<14; i++) {
           particles.push({
             x: px, y: py,
-            vx: (Math.random()-0.5)*8,
-            vy: (Math.random()-0.5)*8 - 2,
+            vx: (Math.random()-0.5)*9,
+            vy: (Math.random()-0.5)*9 - 2,
             life: 1.0,
-            size: 3+Math.random()*6,
-            color: `hsl(${20 + Math.random()*30}, 90%, 60%)`
+            size: 3+Math.random()*7,
+            color: `hsl(${15 + Math.random()*40}, 85%, 58%)`
           });
         }
       }
@@ -364,7 +379,7 @@
           p.y += p.vy;
           p.vy += 0.1;
           p.life -= 0.018;
-          if (p.life <= 0.02 || p.y > canvas.height+30) {
+          if (p.life <= 0.02 || p.y > canvas.height+50) {
             particles.splice(i,1);
           }
         }
@@ -374,60 +389,56 @@
         if (!gameRunning) return;
 
         score += 0.5;
-        
-        // Update speed based on elapsed time
         updateSpeedBasedOnTime();
 
+        // Keyboard handling
         if (leftPressed) targetX -= 14;
         if (rightPressed) targetX += 14;
 
+        // Clamp target and smooth movement
         targetX = Math.max(2, Math.min(targetX, canvas.width - player.width - 2));
         player.x += (targetX - player.x) * 0.28;
 
-        // Spawn rate increases with time
         const elapsed = (performance.now() / 1000) - gameStartTime;
-        const spawnChance = 0.022 + (elapsed / 400);
+        const spawnChance = 0.022 + (elapsed / 380);
         if (Math.random() < spawnChance) {
           spawnObject();
         }
 
+        // Collision detection with tighter hitbox
         for (let i=0; i<objects.length; i++) {
           const obj = objects[i];
           obj.y += obj.speed;
 
-          if (obj.x < player.x + player.width - 4 &&
-              obj.x + obj.width > player.x + 4 &&
-              obj.y < player.y + player.height - 6 &&
-              obj.y + obj.height > player.y + 6) {
+          if (obj.x < player.x + player.width - 6 &&
+              obj.x + obj.width > player.x + 6 &&
+              obj.y < player.y + player.height - 8 &&
+              obj.y + obj.height > player.y + 8) {
             addExplosion(player.x + player.width/2, player.y + player.height/2);
             setTimeout(() => endGame(), 60);
             return;
           }
 
-          if (obj.y > canvas.height + 100) {
+          if (obj.y > canvas.height + 120) {
             objects.splice(i,1);
             i--;
           }
         }
 
-        if (Math.random() < 0.35) {
+        // ambient engine particles for smooth feel
+        if (Math.random() < 0.42) {
           particles.push({
-            x: player.x + player.width/2 + (Math.random()-0.5)*16,
-            y: player.y + player.height-4,
-            vx: (Math.random()-0.5)*2,
-            vy: -1 - Math.random()*3,
+            x: player.x + player.width/2 + (Math.random()-0.5)*18,
+            y: player.y + player.height-5,
+            vx: (Math.random()-0.5)*2.2,
+            vy: -1.2 - Math.random()*3.5,
             life: 0.7,
-            size: 2+Math.random()*4,
-            color: `hsl(195, 90%, 70%)`
+            size: 2+Math.random()*5,
+            color: `hsl(190, 88%, 68%)`
           });
         }
 
         updateParticles();
-
-        if (gameRunning) {
-          hintLeft.style.opacity = '0.8';
-          hintRight.style.opacity = '0.8';
-        }
       }
 
       function drawGame() {
@@ -439,6 +450,7 @@
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        // particles
         for (const p of particles) {
           ctx.globalAlpha = p.life * 0.9;
           ctx.fillStyle = p.color || '#88ddff';
@@ -451,6 +463,7 @@
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1.0;
 
+        // falling crimson orbs
         for (const obj of objects) {
           const gradient = ctx.createRadialGradient(obj.x+5, obj.y+5, 2, obj.x+obj.width/2, obj.y+obj.height/2, obj.width);
           gradient.addColorStop(0, '#ff4d6d');
@@ -470,6 +483,7 @@
           ctx.globalAlpha = 1.0;
         }
 
+        // player core shield & glimmer
         ctx.shadowColor = '#0cf';
         ctx.shadowBlur = 32;
         ctx.fillStyle = '#48d8ff';
@@ -500,20 +514,18 @@
         ctx.fillText(`⚡${Math.floor(score)}`, 24, 68);
         ctx.shadowBlur = 0;
         
-        // Speed and timer display
+        // Speed & timer HUD
         const currentTime = performance.now() / 1000;
         const elapsed = gameRunning ? currentTime - gameStartTime : 0;
         const nextSpeedIn = SPEED_INCREASE_INTERVAL - (elapsed % SPEED_INCREASE_INTERVAL);
         
         ctx.font = '16px "Orbitron", monospace';
         ctx.fillStyle = '#aad0ff';
-        ctx.fillText(`SPEED +${speedLevel}`, canvas.width-140, 48);
-        ctx.fillText(`NEXT +1 in ${nextSpeedIn.toFixed(1)}s`, canvas.width-200, 78);
-        
-        // Current base speed display
+        ctx.fillText(`SPEED +${speedLevel}`, canvas.width-150, 48);
+        ctx.fillText(`NEXT +1 in ${nextSpeedIn.toFixed(1)}s`, canvas.width-210, 78);
         ctx.fillStyle = '#ffb347';
         ctx.font = '14px "Orbitron"';
-        ctx.fillText(`⚡ ${(baseSpeed + speedLevel).toFixed(1)}`, canvas.width-100, 108);
+        ctx.fillText(`⚡ ${(baseSpeed + speedLevel).toFixed(1)}`, canvas.width-110, 108);
       }
 
       function gameLoop() {
@@ -523,25 +535,88 @@
         animationId = requestAnimationFrame(gameLoop);
       }
 
+      // ----- ENHANCED TOUCH/SWIPE LOGIC (works beautifully on phones) -----
+      function initTouchControls() {
+        // Touch start: begins drag and records initial position, also prevents page scroll
+        canvas.addEventListener('touchstart', (e) => {
+          if (!gameRunning) return;
+          e.preventDefault();
+          const touch = e.touches[0];
+          isDragging = true;
+          touchActive = true;
+          lastTouchX = touch.clientX;
+          // optional: set targetX to current player.x for consistent delta
+          targetX = player.x;
+        }, { passive: false });
+        
+        canvas.addEventListener('touchmove', (e) => {
+          if (!gameRunning || !isDragging) return;
+          e.preventDefault();
+          const touch = e.touches[0];
+          const deltaX = touch.clientX - lastTouchX;
+          if (deltaX !== 0) {
+            // Adjust target position with sensitivity 1.2 (smooth, fast swipe)
+            targetX += deltaX * 1.2;
+            // Clamp edges
+            targetX = Math.max(0, Math.min(targetX, canvas.width - player.width));
+            lastTouchX = touch.clientX;
+          }
+        }, { passive: false });
+        
+        canvas.addEventListener('touchend', (e) => {
+          if (!gameRunning) return;
+          e.preventDefault();
+          isDragging = false;
+          touchActive = false;
+        });
+        
+        // Mouse support for debugging and desktop dragging (same as swipe)
+        canvas.addEventListener('mousedown', (e) => {
+          if (!gameRunning) return;
+          e.preventDefault();
+          isDragging = true;
+          lastTouchX = e.clientX;
+          targetX = player.x;
+        });
+        
+        window.addEventListener('mousemove', (e) => {
+          if (!gameRunning || !isDragging) return;
+          e.preventDefault();
+          const deltaX = e.clientX - lastTouchX;
+          if (deltaX !== 0) {
+            targetX += deltaX * 1.2;
+            targetX = Math.max(0, Math.min(targetX, canvas.width - player.width));
+            lastTouchX = e.clientX;
+          }
+        });
+        
+        window.addEventListener('mouseup', () => {
+          isDragging = false;
+        });
+        
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+      }
+      
       function startGame() {
-        cancelAnimationFrame(animationId);
+        if (animationId) cancelAnimationFrame(animationId);
         menuDiv.style.display = 'none';
         gameOverDiv.style.display = 'none';
         canvas.style.display = 'block';
         
         hintLeft.style.display = 'block';
         hintRight.style.display = 'block';
-
+        hintRight.style.opacity = '1';
+        
         resizeCanvas();
         resetGameState();
         gameRunning = true;
         
-        // Set precise start time
         gameStartTime = performance.now() / 1000;
         
         leftPressed = false;
         rightPressed = false;
         isDragging = false;
+        touchActive = false;
         
         gameLoop();
       }
@@ -560,6 +635,7 @@
         hintRight.style.display = 'none';
         leftPressed = false;
         rightPressed = false;
+        isDragging = false;
       }
 
       function endGame() {
@@ -568,7 +644,7 @@
         cancelAnimationFrame(animationId);
         
         addExplosion(player.x+player.width/2, player.y+player.height/2);
-        drawGame();
+        drawGame();  // final freeze frame with explosion
         
         canvas.style.display = 'none';
         gameOverDiv.style.display = 'flex';
@@ -581,6 +657,7 @@
         
         leftPressed = false;
         rightPressed = false;
+        isDragging = false;
       }
 
       if (!CanvasRenderingContext2D.prototype.roundRect) {
@@ -596,6 +673,7 @@
         };
       }
 
+      // Keyboard listeners
       window.addEventListener('keydown', e => {
         if (!gameRunning) return;
         if (e.key === 'ArrowLeft') {
@@ -617,57 +695,21 @@
         }
       });
 
-      function handleDragStart(e) {
-        if (!gameRunning) return;
-        e.preventDefault();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        isDragging = true;
-        lastDragX = clientX;
-        targetX = player.x;
-      }
-
-      function handleDragMove(e) {
-        if (!gameRunning || !isDragging) return;
-        e.preventDefault();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const delta = clientX - lastDragX;
-        targetX += delta * 1.4;
-        targetX = Math.max(0, Math.min(targetX, canvas.width - player.width));
-        lastDragX = clientX;
-      }
-
-      function handleDragEnd(e) {
-        isDragging = false;
-      }
-
-      canvas.addEventListener('touchstart', handleDragStart, {passive: false});
-      canvas.addEventListener('touchmove', handleDragMove, {passive: false});
-      canvas.addEventListener('touchend', handleDragEnd);
-      canvas.addEventListener('mousedown', handleDragStart);
-      window.addEventListener('mousemove', (e) => {
-        if (!gameRunning || !isDragging) return;
-        e.preventDefault();
-        const clientX = e.clientX;
-        const delta = clientX - lastDragX;
-        targetX += delta * 1.2;
-        targetX = Math.max(0, Math.min(targetX, canvas.width - player.width));
-        lastDragX = clientX;
-      });
-      window.addEventListener('mouseup', handleDragEnd);
-
-      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
-      startBtn.onclick = startGame;
-      restartBtn.onclick = restartGame;
-      mainMenuBtn.onclick = returnToMainMenu;
-
+      // Window resize adapt
       window.addEventListener('resize', () => {
         resizeCanvas();
         if (gameRunning) {
-          targetX = Math.min(targetX, canvas.width - player.width);
-          player.x = Math.min(player.x, canvas.width - player.width);
+          targetX = Math.min(Math.max(targetX, 0), canvas.width - player.width);
+          player.x = Math.min(Math.max(player.x, 0), canvas.width - player.width);
         }
       });
+
+      // Initialize game controls and touch
+      initTouchControls();
+      
+      startBtn.onclick = startGame;
+      restartBtn.onclick = restartGame;
+      mainMenuBtn.onclick = returnToMainMenu;
 
       resizeCanvas();
       hintLeft.style.display = 'none';
